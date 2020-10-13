@@ -32,6 +32,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 
 static atomic_t current_settings;
 struct bt_conn_auth_cb cb;
+static uint8_t oob_legacy_tk[16] = { 0 };
 
 static void le_connected(struct bt_conn *conn, uint8_t err)
 {
@@ -130,6 +131,7 @@ static void supported_commands(uint8_t *data, uint16_t len)
 	tester_set_bit(cmds, GAP_PASSKEY_CONFIRM);
 	tester_set_bit(cmds, GAP_CONN_PARAM_UPDATE);
 	tester_set_bit(cmds, GAP_SET_MITM);
+	tester_set_bit(cmds, GAP_OOB_LEGACY_SET_DATA);
 
 	tester_send(BTP_SERVICE_ID_GAP, GAP_READ_SUPPORTED_COMMANDS,
 		    CONTROLLER_INDEX, (uint8_t *) rp, sizeof(cmds));
@@ -805,6 +807,25 @@ static void set_mitm(const uint8_t *data, uint16_t len)
 		   BTP_STATUS_SUCCESS);
 }
 
+static void oob_data_request(struct bt_conn *conn, struct bt_conn_oob_info *info)
+{
+	int err = bt_le_oob_set_legacy_tk(conn, oob_legacy_tk);
+	if (err < 0) {
+		LOG_ERR("Failed to set OOB Temp Key: %d", err);
+	}
+}
+
+static void set_oob_legacy_data(const uint8_t *data, uint16_t len)
+{
+	const struct gap_oob_legacy_set_data_cmd *cmd = (void *) data;
+	memcpy(oob_legacy_tk, cmd->oob_data, 16);
+
+	bt_set_oob_data_flag(true);
+	cb.oob_data_request = oob_data_request;
+
+	tester_rsp(BTP_SERVICE_ID_GAP, GAP_OOB_LEGACY_SET_DATA, CONTROLLER_INDEX,
+		BTP_STATUS_SUCCESS);
+}
 
 void tester_handle_gap(uint8_t opcode, uint8_t index, uint8_t *data,
 		       uint16_t len)
@@ -889,6 +910,9 @@ void tester_handle_gap(uint8_t opcode, uint8_t index, uint8_t *data,
 		return;
 	case GAP_SET_MITM:
 		set_mitm(data, len);
+		return;
+	case GAP_OOB_LEGACY_SET_DATA:
+		set_oob_legacy_data(data, len);
 		return;
 	default:
 		LOG_WRN("Unknown opcode: 0x%x", opcode);
