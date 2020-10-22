@@ -373,8 +373,10 @@ static void start_advertising(const uint8_t *data, uint16_t len)
 {
 	const struct gap_start_advertising_cmd *cmd = (void *) data;
 	struct gap_start_advertising_rp rp;
+	struct bt_le_adv_param *adv_param;
 	uint8_t adv_len, sd_len;
-	bool adv_conn;
+	uint32_t adv_opt = 0;
+	bt_addr_le_t *peer = NULL;
 	int i;
 
 	for (i = 0, adv_len = 1U; i < cmd->adv_data_len; adv_len++) {
@@ -401,11 +403,24 @@ static void start_advertising(const uint8_t *data, uint16_t len)
 		i += sd[sd_len].data_len;
 	}
 
-	adv_conn = atomic_test_bit(&current_settings, GAP_SETTINGS_CONNECTABLE);
+	if (atomic_test_bit(&current_settings, GAP_SETTINGS_CONNECTABLE)) {
+		adv_opt |= BT_LE_ADV_OPT_CONNECTABLE;
+	} else if (!atomic_test_bit(&current_settings, GAP_SETTINGS_PRIVACY)) {
+		/*
+		 * non-connectable advertiser without privacy requires
+		 * BT_LE_ADV_OPT_USE_IDENTITY in order to use its 
+		 * identity address.
+		 */
+		adv_opt |= BT_LE_ADV_OPT_USE_IDENTITY;
+	}
 
-	/* BTP API don't allow to set empty scan response data. */
-	if (bt_le_adv_start(adv_conn ? BT_LE_ADV_CONN : BT_LE_ADV_NCONN,
-			    ad, adv_len, sd_len ? sd : NULL, sd_len) < 0) {
+	adv_param = BT_LE_ADV_PARAM(adv_opt, 
+				    BT_GAP_ADV_FAST_INT_MIN_2,
+				    BT_GAP_ADV_FAST_INT_MAX_2,
+				    peer);
+
+	/* BTP API don't allow to set empty scan response data. */	
+	if (bt_le_adv_start(adv_param, ad, adv_len, sd_len ? sd : NULL, sd_len) < 0) {
 		LOG_ERR("Failed to start advertising");
 		goto fail;
 	}
