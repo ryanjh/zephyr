@@ -19,7 +19,7 @@ LOG_MODULE_REGISTER(LOG_MODULE_NAME);
 #include "bttester.h"
 
 #define CONTROLLER_INDEX 0
-#define DATA_MTU 230
+#define DATA_MTU 264
 #define CHANNELS 2
 #define SERVERS 1
 
