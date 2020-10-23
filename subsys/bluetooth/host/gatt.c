@@ -420,7 +420,7 @@ enum {
 #define CF_BIT_NOTIFY_MULTI	2
 #define CF_BIT_LAST		CF_BIT_NOTIFY_MULTI
 
-#define CF_BYTE_LAST		(CF_BIT_LAST % 8)
+#define CF_BYTE_LAST		(CF_BIT_LAST / 8)
 
 #define CF_ROBUST_CACHING(_cfg) (_cfg->data[0] & BIT(CF_BIT_ROBUST_CACHING))
 #define CF_EATT(_cfg) (_cfg->data[0] & BIT(CF_BIT_EATT))
@@ -504,8 +504,26 @@ static bool cf_set_value(struct gatt_cf_cfg *cfg, const uint8_t *value, uint16_t
 	}
 
 	/* Set the bits for each octect */
-	for (i = 0U; i < len && i < last_byte; i++) {
-		cfg->data[i] |= value[i] & (BIT(last_bit + 1) - 1);
+	for (i = 0U; i < len && i <= last_byte; i++) {
+		/* The server shall support the feature and fulfill
+		 * all requirements if a client feature bit is set by
+		 * a client.
+		 */
+		if (IS_ENABLED(CONFIG_BT_GATT_CACHING)) {
+			WRITE_BIT(cfg->data[i], CF_BIT_ROBUST_CACHING,
+			          value[i] & BIT(CF_BIT_ROBUST_CACHING));
+		}
+
+		if (IS_ENABLED(CONFIG_BT_EATT)) {
+			WRITE_BIT(cfg->data[i], CF_BIT_EATT,
+			          value[i] & BIT(CF_BIT_EATT));
+		}
+
+		if (IS_ENABLED(CONFIG_BT_GATT_NOTIFY_MULTIPLE)) {
+			WRITE_BIT(cfg->data[i], CF_BIT_NOTIFY_MULTI,
+			          value[i] & BIT(CF_BIT_NOTIFY_MULTI));
+		}
+
 		BT_DBG("byte %u: data 0x%02x value 0x%02x", i, cfg->data[i],
 		       value[i]);
 	}
