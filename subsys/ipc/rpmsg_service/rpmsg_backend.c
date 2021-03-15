@@ -146,7 +146,7 @@ static void virtio_notify(struct virtqueue *vq)
 	}
 }
 
-const struct virtio_dispatch dispatch = {
+const struct virtio_dispatch dispatch_rpc = {
 	.get_status = virtio_get_status,
 	.set_status = virtio_set_status,
 	.get_features = virtio_get_features,
@@ -275,7 +275,7 @@ int rpmsg_backend_init(struct metal_io_region **io, struct virtio_device *vdev)
 
 	vdev->role = RPMSG_ROLE;
 	vdev->vrings_num = VRING_COUNT;
-	vdev->func = &dispatch;
+	vdev->func = &dispatch_rpc;
 	vdev->vrings_info = &rvrings[0];
 
 	return 0;

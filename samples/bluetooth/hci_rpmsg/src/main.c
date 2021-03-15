@@ -247,6 +247,171 @@ int endpoint_cb(struct rpmsg_endpoint *ept, void *data, size_t len, uint32_t src
 	return RPMSG_SUCCESS;
 }
 
+#if 1
+
+#if 1
+#include <mpsl.h>
+#include <mpsl_timeslot.h>
+
+#define TIMESLOT_REQUEST_DISTANCE_US (1000000)
+#define TIMESLOT_LENGTH_US           (200)
+
+static bool request_in_cb = false;
+
+/* Timeslot requests */
+static mpsl_timeslot_request_t timeslot_request_earliest = {
+	.request_type = MPSL_TIMESLOT_REQ_TYPE_EARLIEST,
+	.params.earliest.hfclk = MPSL_TIMESLOT_HFCLK_CFG_NO_GUARANTEE,
+	.params.earliest.priority = MPSL_TIMESLOT_PRIORITY_NORMAL,
+	.params.earliest.length_us = TIMESLOT_LENGTH_US,
+	.params.earliest.timeout_us = 1000000
+};
+
+static mpsl_timeslot_signal_return_param_t signal_callback_return_param;
+
+static mpsl_timeslot_signal_return_param_t *mpsl_timeslot_callback(
+	mpsl_timeslot_session_id_t session_id,
+	uint32_t signal_type)
+{
+	(void) session_id; /* unused parameter */
+
+	mpsl_timeslot_signal_return_param_t *p_ret_val = NULL;
+
+	switch (signal_type) {
+	case MPSL_TIMESLOT_SIGNAL_START:
+		printk("MPSL_TIMESLOT_SIGNAL_START\n");
+		if (request_in_cb) {
+			// /* Request new timeslot when callback returns */
+			// signal_callback_return_param.params.request.p_next =
+			// 	&timeslot_request_normal;
+			// signal_callback_return_param.callback_action =
+			// 	MPSL_TIMESLOT_SIGNAL_ACTION_REQUEST;
+		} else {
+			/* No return action, so timeslot will be ended */
+			signal_callback_return_param.params.request.p_next =
+				NULL;
+			signal_callback_return_param.callback_action =
+				MPSL_TIMESLOT_SIGNAL_ACTION_NONE;
+		}
+
+		p_ret_val = &signal_callback_return_param;
+		break;
+	case MPSL_TIMESLOT_SIGNAL_SESSION_IDLE:
+		printk("MPSL_TIMESLOT_SIGNAL_SESSION_IDLE\n");
+		break;
+	case MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED:
+		printk("MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED\n");
+		break;
+	default:
+		printk("unexpected signal: %u\n", signal_type);
+		break;
+	}
+	return p_ret_val;
+}
+#endif
+
+#include <tinycbor/cbor.h>
+#include <nrf_rpc_cbor.h>
+
+#define MAX_ENCODED_LEN 16
+
+enum rpc_command {
+	MATH_COMMAND_INC = 0x01,
+};
+
+
+/* Defines a group that contains functions implemented in this
+ * sample. Second parameter have to be the same in both remote
+ * and local side.
+ */
+NRF_RPC_GROUP_DEFINE(math_group, "sample_math", NULL, NULL, NULL);
+
+
+static void remote_inc_handler(CborValue *value, void* handler_data)
+{
+        int err;
+        int input = 0;
+        int output;
+        struct nrf_rpc_cbor_ctx ctx;
+
+        /* Parsing the input */
+
+        if (cbor_value_is_integer(value)) {
+                cbor_value_get_int(value, &input);
+        }
+
+        nrf_rpc_cbor_decoding_done(value);
+
+        /* Actual hard work is done in below line */
+
+#if 1
+	mpsl_timeslot_session_id_t session_id = 0xFFu;
+	err = mpsl_timeslot_session_open(
+					mpsl_timeslot_callback,
+					&session_id);
+	if (err)
+	{
+		printk("[Err] mpsl_timeslot_session_open\n");
+	}
+
+
+	err = mpsl_timeslot_request(
+					session_id,
+					&timeslot_request_earliest);
+	if (err)
+	{
+		printk("[Err] mpsl_timeslot_request\n");
+	}
+#endif
+
+        output = input + 1;
+
+        /* Encoding and sending the response */
+
+        NRF_RPC_CBOR_ALLOC(ctx, MAX_ENCODED_LEN);
+
+        cbor_encode_int(&ctx.encoder, output);
+
+        err = nrf_rpc_cbor_rsp(&ctx);
+
+        if (err < 0) {
+                // fatal_error(err);
+        }
+}
+
+NRF_RPC_CBOR_CMD_DECODER(math_group, remote_inc_handler,
+                         MATH_COMMAND_INC, remote_inc_handler, NULL);
+#endif
+
+static void err_handler(const struct nrf_rpc_err_report *report)
+{
+	printk("nRF RPC error %d ocurred. See nRF RPC logs for more details.",
+	       report->code);
+	k_oops();
+}
+
+
+static int serialization_init(const struct device *dev)
+{
+	ARG_UNUSED(dev);
+
+	int err;
+
+	printk("Init begin [NET]\n");
+
+	err = nrf_rpc_init(err_handler);
+	if (err) {
+		return -NRF_EINVAL;
+	}
+
+	printk("Init done [NET]\n");
+
+	return 0;
+}
+
+
+SYS_INIT(serialization_init, POST_KERNEL, CONFIG_APPLICATION_INIT_PRIORITY);
+
 void main(void)
 {
 	int err;
