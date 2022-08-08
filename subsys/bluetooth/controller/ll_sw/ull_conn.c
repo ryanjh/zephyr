@@ -4599,6 +4599,7 @@ static inline void event_phy_req_prep(struct ll_conn *conn)
 static inline void event_phy_upd_ind_prep(struct ll_conn *conn,
 					  uint16_t event_counter)
 {
+	printk("event_phy_upd_ind_prep %x %x\n", event_counter, conn->llcp.phy_upd_ind.instant);
 	struct node_rx_pu *upd;
 
 	if (conn->llcp.phy_upd_ind.initiate) {
